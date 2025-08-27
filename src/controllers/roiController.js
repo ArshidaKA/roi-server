@@ -11,25 +11,49 @@ export async function createEntry(req, res) {
   }
 }
 
-// Get entries (daily/monthly)
+
+// Get ROI Entries with filters (today / monthly / custom)
 export async function getEntries(req, res) {
-  const { filter } = req.query; // daily | monthly | all
-  let query = {};
-  if (filter === "daily") {
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    query.date = { $gte: today, $lt: tomorrow };
-  } else if (filter === "monthly") {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth()+1, 1);
-    query.date = { $gte: start, $lt: end };
+  try {
+    const { filter, startDate, endDate } = req.query;
+    let query = {};
+
+    if (filter === "today") {
+      const today = new Date();
+      query.date = {
+        $gte: new Date(today.setHours(0, 0, 0, 0)),
+        $lte: new Date(today.setHours(23, 59, 59, 999)),
+      };
+    } else if (filter === "monthly") {
+      const now = new Date();
+      query.date = {
+        $gte: new Date(now.getFullYear(), now.getMonth(), 1),
+        $lte: new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        ),
+      };
+    } else if (filter === "custom" && startDate && endDate) {
+      query.date = {
+        $gte: new Date(new Date(startDate).setHours(0, 0, 0, 0)),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+      };
+    }
+
+    const entries = await ROIEntry.find(query).sort({ date: 1 });
+    res.json(entries);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
-  const entries = await ROIEntry.find(query).sort({ date: -1 });
-  res.json(entries);
 }
+
+
+
 
 // Request Edit
 export async function requestEdit(req, res) {
@@ -61,9 +85,19 @@ export async function reviewEdit(req, res) {
   await request.save();
   res.json(request);
 }
+// Get Edit Requests
 export async function getEditRequests(req, res) {
   try {
-    const requests = await EditRequest.find().populate("requestedBy", "name email");
+    let query = {};
+
+    // If staff -> only their requests
+    if (req.user.role === "STAFF") {
+      query.requestedBy = req.user.id;
+    }
+
+    const requests = await EditRequest.find(query)
+      .populate("requestedBy", "name email");
+
     res.json(requests);
   } catch (err) {
     res.status(400).json({ message: err.message });

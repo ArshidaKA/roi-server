@@ -8,9 +8,12 @@ const router = Router();
 // router.get("/", auth, getEntries);
 router.post("/", createEntry);
 router.get("/", getEntries);
+
 router.post("/edit-request", auth, requestEdit);
-router.get("/edit-requests", auth, requireRole("OWNER"), getEditRequests);
+router.get("/edit-requests", auth, getEditRequests);
+
 
 router.patch("/edit-request/:id", auth, requireRole("OWNER"), reviewEdit);
+
 
 export default router;

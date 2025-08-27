@@ -94,31 +94,12 @@ export async function me(req, res) {
 }
 
 
-
-
-// export async function logout(req, res) {
-//   try {
-//     const token = req.token || req.cookies?.token;
-//     if (!token) return res.status(400).json({ message: "No token found" });
-
-//     // ✅ Add token to blacklist until it naturally expires
-//     const decoded = jwt.decode(token);
-//     const exp = decoded.exp; // expiry in seconds (from JWT)
-//     const ttl = exp - Math.floor(Date.now() / 1000);
-
-//     if (ttl > 0) {
-//       await redis.set(`bl_${token}`, "1", "EX", ttl);
-//     }
-
-//     // Clear cookie if used
-//     res.clearCookie("token", {
-//       httpOnly: true,
-//       sameSite: "strict",
-//       secure: process.env.NODE_ENV === "production"
-//     });
-
-//     res.json({ message: "Logged out successfully" });
-//   } catch (e) {
-//     res.status(500).json({ message: "Logout failed" });
-//   }
-// }
+// ✅ Get all users (only OWNER)
+export async function getAllUsers(req, res) {
+  try {
+    const users = await User.find().select("-passwordHash"); // hide password hash
+    res.json({ users });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch users" });
+  }
+}
