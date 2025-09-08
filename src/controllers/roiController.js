@@ -12,7 +12,7 @@ export async function createEntry(req, res) {
 }
 
 
-// Get ROI Entries with filters (today / monthly / custom)
+// Get ROI Entries with filters (today / thisMonth / thisYear / custom / lifetime)
 export async function getEntries(req, res) {
   try {
     const { filter, startDate, endDate } = req.query;
@@ -24,7 +24,7 @@ export async function getEntries(req, res) {
         $gte: new Date(today.setHours(0, 0, 0, 0)),
         $lte: new Date(today.setHours(23, 59, 59, 999)),
       };
-    } else if (filter === "monthly") {
+    } else if (filter === "thisMonth") {
       const now = new Date();
       query.date = {
         $gte: new Date(now.getFullYear(), now.getMonth(), 1),
@@ -38,10 +38,22 @@ export async function getEntries(req, res) {
           999
         ),
       };
+    } else if (filter === "thisYear") {
+      const now = new Date();
+      query.date = {
+        $gte: new Date(now.getFullYear(), 0, 1),
+        $lte: new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999),
+      };
     } else if (filter === "custom" && startDate && endDate) {
       query.date = {
         $gte: new Date(new Date(startDate).setHours(0, 0, 0, 0)),
         $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+      };
+    } 
+    // ✅ Default: lifetime (till now)
+    else {
+      query.date = {
+        $lte: new Date(), // everything before or equal to now
       };
     }
 
@@ -66,6 +78,24 @@ export async function requestEdit(req, res) {
   }
 }
 
+// controllers/roiController.js
+export async function getPendingRequestsCount(req, res) {
+  try {
+    let query = { status: "PENDING" };
+
+    // If staff -> only their own pending requests
+    if (req.user.role === "STAFF") {
+      query.requestedBy = req.user.id;
+    }
+
+    const count = await EditRequest.countDocuments(query);
+    res.json({ count });
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching pending requests count" });
+  }
+}
+
+
 // Approve/Reject Edit (Owner only)
 export async function reviewEdit(req, res) {
   const { id } = req.params;
@@ -86,20 +116,49 @@ export async function reviewEdit(req, res) {
   res.json(request);
 }
 // Get Edit Requests
+// controllers/roiController.js
 export async function getEditRequests(req, res) {
   try {
     let query = {};
+    const { status, startDate, endDate, page = 1, limit = 10 } = req.query;
 
-    // If staff -> only their requests
+    // Filter by role (staff only sees their own)
     if (req.user.role === "STAFF") {
       query.requestedBy = req.user.id;
     }
 
-    const requests = await EditRequest.find(query)
-      .populate("requestedBy", "name email");
+    // Filter by status
+    if (status && status !== "ALL") {
+      query.status = status;
+    }
 
-    res.json(requests);
+    // Filter by date
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(new Date(startDate).setHours(0, 0, 0, 0)),
+        $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+      };
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Fetch data with pagination + latest first
+    const requests = await EditRequest.find(query)
+      .populate("requestedBy", "name email")
+      .sort({ createdAt: -1 }) // latest first
+      .skip(skip)
+      .limit(Number(limit));
+
+    const total = await EditRequest.countDocuments(query);
+
+    res.json({
+      requests,
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+    });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
 }
+

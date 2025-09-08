@@ -1,8 +1,14 @@
 import { Router } from "express";
 import { auth, requireRole } from "../middleware/auth.js";
 import { createEntry, getEditRequests, getEntries, requestEdit, reviewEdit } from "../controllers/roiController.js";
+import { getPendingRequestsCount } from "../controllers/roiController.js";
+
 
 const router = Router();
+
+// routes/roiRoutes.js
+
+router.get("/edit-requests/pending/count", auth, getPendingRequestsCount);
 
 // router.post("/", auth, requireRole("OWNER"), createEntry);
 // router.get("/", auth, getEntries);
