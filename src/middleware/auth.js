@@ -23,10 +23,18 @@ export async function auth(req, res, next) {
   }
 }
 
-export function requireRole(role) {
+export function requireRole(roles) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ message: "Unauthorized" });
-    if (req.user.role !== role) return res.status(403).json({ message: "Forbidden" });
+
+    // Convert single role → array
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     next();
   };
 }
+
