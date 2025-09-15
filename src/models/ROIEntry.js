@@ -1,7 +1,7 @@
   import mongoose from "mongoose";
 
   const subItemSchema = new mongoose.Schema({
-    name: String,
+    item: String,
     amount: Number
   }, { _id: false });
 

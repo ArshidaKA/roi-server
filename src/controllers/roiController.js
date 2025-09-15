@@ -72,7 +72,6 @@ export async function requestEdit(req, res) {
     const request = await EditRequest.create({
       entryId,
       fieldPath,
-      
       newValue,
       reason,
       requestedBy: req.user.id,
