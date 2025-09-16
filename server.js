@@ -6,6 +6,10 @@ import connectDB from "./src/config/db.js";
 import authRoutes from "./src/routes/auth.js";
 import roiRoutes from "./src/routes/roi.js";
 import adminRoutes from "./src/routes/admin.js";
+import staffRoutes from "./src/routes/staff.js";
+import attendanceRoutes from "./src/routes/attendance.js";
+
+
 
 
 
@@ -34,7 +38,11 @@ credentials: true
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/auth", authRoutes);
 app.use("/api/roi", roiRoutes);
+app.use("/api/staff", staffRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/attendance", attendanceRoutes);
+
+
 
 
 

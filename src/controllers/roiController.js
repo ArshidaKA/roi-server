@@ -1,11 +1,49 @@
 // controllers/roiController.js
 import ROIEntry from "../models/ROIEntry.js";
 import EditRequest from "../models/EditRequest.js";
-
+import Staff from "../models/staff.js";
+import Attendance from "../models/attendance.js";
 // Create ROI Entry (OWNER)
 export async function createEntry(req, res) {
   try {
-    const entry = await ROIEntry.create({ ...req.body, createdBy: req?.user?.id });
+    const entryDate = new Date(req.body.date);
+    const month = entryDate.getMonth() + 1;
+    const year = entryDate.getFullYear();
+
+    // Get attendance for the month
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0);
+    
+    const attendance = await Attendance.find({
+      date: { $gte: startDate, $lte: endDate }
+    }).populate("staffId");
+
+    // Calculate total staff salary based on attendance
+    const staffSalaryMap = {};
+    attendance.forEach(record => {
+      if (!staffSalaryMap[record.staffId._id]) {
+        staffSalaryMap[record.staffId._id] = 0;
+      }
+      staffSalaryMap[record.staffId._id] += record.calculatedSalary || 0;
+    });
+
+    const totalStaffSalary = Object.values(staffSalaryMap).reduce((sum, salary) => sum + salary, 0);
+
+    // Calculate total staff accommodation (fixed monthly)
+    const staffMembers = await Staff.find({ isActive: true });
+    const totalStaffAccommodation = staffMembers.reduce((sum, staff) => sum + (staff.accommodation || 0), 0);
+    
+    // Create entry with calculated values
+    const entry = await ROIEntry.create({ 
+      ...req.body, 
+      createdBy: req?.user?.id,
+      expenses: {
+        ...req.body.expenses,
+        staffSalary: [{ name: "Total Staff Salary", amount: totalStaffSalary }],
+        staffAccommodation: [{ name: "Total Staff Accommodation", amount: totalStaffAccommodation }]
+      }
+    });
+    
     res.status(201).json(entry);
   } catch (err) {
     res.status(400).json({ message: err.message });
