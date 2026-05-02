@@ -4,6 +4,7 @@ import EditRequest from "../models/EditRequest.js";
 import Staff from "../models/staff.js";
 import Attendance from "../models/Attendance.js";
 // Create ROI Entry (OWNER)
+
 export async function createEntry(req, res) {
   try {
     const entryDate = new Date(req.body.date);
