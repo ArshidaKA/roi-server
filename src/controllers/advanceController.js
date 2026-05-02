@@ -1,6 +1,6 @@
 // src/controllers/advanceController.js
 import { StaffAdvance } from "../models/StaffAdvance.js";
-import Staff from "../models/Staff.js";
+import Staff from "../models/taff.js";
 
 // GET /staff/advances — all staff advances with staffName populated
 export async function getAllAdvances(req, res) {

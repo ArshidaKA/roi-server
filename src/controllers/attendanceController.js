@@ -1,7 +1,7 @@
 // src/controllers/attendanceController.js
 import Attendance from "../models/Attendance.js";
 import ROIEntry from "../models/ROIEntry.js";
-import Staff from "../models/Staff.js";
+import Staff from "../models/staff.js";
 
 export async function markAttendance(req, res) {
   try {
