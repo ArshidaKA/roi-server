@@ -1,4 +1,4 @@
-import Staff from "../models/Staff.js";
+import Staff from "../models/staff.js";
 
 export async function getStaff(req, res) {
   try {
@@ -16,6 +16,7 @@ export async function createStaff(req, res) {
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
+
 }
 
 export async function updateStaff(req, res) {

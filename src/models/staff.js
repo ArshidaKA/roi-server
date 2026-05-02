@@ -20,5 +20,6 @@ staffSchema.pre("save", function (next) {
   next();
 });
 
+
 // ✅ Fix OverwriteModelError by reusing existing model if already compiled
 export default mongoose.models.Staff || mongoose.model("Staff", staffSchema);
