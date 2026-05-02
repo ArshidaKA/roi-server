@@ -1,26 +1,24 @@
+// src/controllers/attendanceController.js
 import Attendance from "../models/Attendance.js";
 import ROIEntry from "../models/ROIEntry.js";
 import Staff from "../models/Staff.js";
 
-// 👈 add this
-
 export async function markAttendance(req, res) {
   try {
     const { staffId, date, status } = req.body;
-    
+
     const staff = await Staff.findById(staffId);
     if (!staff) return res.status(404).json({ message: "Staff not found" });
 
     let calculatedSalary = 0;
-    if (status === "present") calculatedSalary = staff.dailySalary || staff.salary / 26;
-    else if (status === "half-day") calculatedSalary = (staff.dailySalary || staff.salary / 26) / 2;
-    else if (status === "leave" || status === "absent") calculatedSalary = 0;
+    const daily = staff.dailySalary || staff.salary / 30;
+    if (status === "present")  calculatedSalary = daily;
+    else if (status === "half-day") calculatedSalary = daily / 2;
 
-    // Check if attendance already exists for this date
-    const existingAttendance = await Attendance.findOne({
-      staffId,
-      date: new Date(date)
-    });
+    const dateObj = new Date(date);
+    dateObj.setHours(0, 0, 0, 0);
+
+    const existingAttendance = await Attendance.findOne({ staffId, date: dateObj });
 
     let attendance;
     if (existingAttendance) {
@@ -30,36 +28,10 @@ export async function markAttendance(req, res) {
         { new: true }
       ).populate("staffId", "name role");
     } else {
-      attendance = await Attendance.create({
-        staffId,
-        date: new Date(date),
-        status,
-        calculatedSalary,
-        createdBy: req.user.id
-      }).populate("staffId", "name role");
+      attendance = new Attendance({ staffId, date: dateObj, status, calculatedSalary, createdBy: req.user.id });
+      await attendance.save();
+      attendance = await attendance.populate("staffId", "name role");
     }
-
-    // ✅ Update ROI Entry for that day
-    await ROIEntry.findOneAndUpdate(
-      { date: new Date(date) },
-      {
-        $inc: { "expenses.staffSalary.0.amount": calculatedSalary }, // push into expenses
-        $setOnInsert: {
-          date: new Date(date),
-          totalRevenue: 0,
-          purchaseCost: [],
-          expenses: {
-            food: 0,
-            rent: 0,
-            electricity: 0,
-            staffSalary: [{ name: "Staff Salary", amount: 0 }],
-            staffAccommodation: [{ name: "Staff Accommodation", amount: 0 }],
-          },
-          createdBy: req.user.id,
-        },
-      },
-      { new: true, upsert: true }
-    );
 
     res.status(201).json(attendance);
   } catch (err) {
@@ -67,13 +39,17 @@ export async function markAttendance(req, res) {
   }
 }
 
-
 export async function getAttendance(req, res) {
   try {
     const { date, staffId } = req.query;
     let query = {};
-
-    if (date) query.date = new Date(date);
+    if (date) {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      const d2 = new Date(d);
+      d2.setDate(d2.getDate() + 1);
+      query.date = { $gte: d, $lt: d2 };
+    }
     if (staffId) query.staffId = staffId;
 
     const attendance = await Attendance.find(query)
@@ -94,16 +70,13 @@ export async function updateAttendance(req, res) {
     const attendance = await Attendance.findById(id).populate("staffId");
     if (!attendance) return res.status(404).json({ message: "Attendance not found" });
 
+    const daily = attendance.staffId.dailySalary || attendance.staffId.salary / 30;
     let calculatedSalary = 0;
-    if (status === "present") calculatedSalary = attendance.staffId.dailySalary || attendance.staffId.salary / 26;
-    else if (status === "half-day") calculatedSalary = (attendance.staffId.dailySalary || attendance.staffId.salary / 26) / 2;
-    else if (status === "leave") calculatedSalary = 0;
-    else if (status === "absent") calculatedSalary = 0;
+    if (status === "present")  calculatedSalary = daily;
+    else if (status === "half-day") calculatedSalary = daily / 2;
 
     const updated = await Attendance.findByIdAndUpdate(
-      id,
-      { status, calculatedSalary },
-      { new: true }
+      id, { status, calculatedSalary }, { new: true }
     ).populate("staffId", "name role");
 
     res.json(updated);
@@ -116,7 +89,7 @@ export async function getMonthlyAttendance(req, res) {
   try {
     const { month, year } = req.query;
     const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
+    const endDate   = new Date(year, month, 0, 23, 59, 59);
 
     const attendance = await Attendance.find({
       date: { $gte: startDate, $lte: endDate }
@@ -127,32 +100,61 @@ export async function getMonthlyAttendance(req, res) {
     res.status(400).json({ message: err.message });
   }
 }
+
+// GET /attendance/salary-summary?date=YYYY-MM-DD   → single day totals
+// GET /attendance/salary-summary?month=YYYY-MM     → month totals + perStaff earned
 export async function getSalarySummary(req, res) {
   try {
-    const { date } = req.query;
-    if (!date) return res.status(400).json({ message: "Date is required" });
+    const { date, month } = req.query;
 
-    const targetDate = new Date(date);
+    if (date) {
+      // ── Single day ──────────────────────────────────────
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      const d2 = new Date(d);
+      d2.setDate(d2.getDate() + 1);
 
-    // Find all attendance records for that date
-    const attendanceRecords = await Attendance.find({ date: targetDate })
-      .populate("staffId", "name role salary accommodation");
+      const records = await Attendance.find({ date: { $gte: d, $lt: d2 } })
+        .populate("staffId", "name role salary accommodation");
 
-    // Calculate totals
-    let totalSalary = 0;
-    let totalAccommodation = 0;
+      let totalSalary = 0;
+      let totalAccommodation = 0;
+      records.forEach(r => {
+        totalSalary        += r.calculatedSalary || 0;
+        totalAccommodation += r.staffId?.accommodation || 0;
+      });
 
-    attendanceRecords.forEach((record) => {
-      totalSalary += record.calculatedSalary || 0;
-      totalAccommodation += record.staffId.accommodation || 0;
-    });
+      return res.json({ date: d, totalSalary, totalAccommodation, count: records.length });
+    }
 
-    res.json({
-      date: targetDate,
-      totalSalary,
-      totalAccommodation,
-      count: attendanceRecords.length,
-    });
+    if (month) {
+      // ── Monthly ─────────────────────────────────────────
+      const [yr, mo] = month.split("-").map(Number);
+      const startDate = new Date(yr, mo - 1, 1);
+      const endDate   = new Date(yr, mo, 0, 23, 59, 59);
+
+      const records = await Attendance.find({ date: { $gte: startDate, $lte: endDate } })
+        .populate("staffId", "name role salary accommodation");
+
+      let totalSalary = 0;
+      let totalAccommodation = 0;
+      const perStaff = {};
+
+      records.forEach(r => {
+        totalSalary        += r.calculatedSalary || 0;
+        totalAccommodation += r.staffId?.accommodation || 0;
+        const sid = r.staffId?._id?.toString();
+        if (sid) {
+          if (!perStaff[sid]) perStaff[sid] = { earned: 0, days: 0 };
+          perStaff[sid].earned += r.calculatedSalary || 0;
+          perStaff[sid].days   += r.status === "half-day" ? 0.5 : r.status === "present" ? 1 : 0;
+        }
+      });
+
+      return res.json({ month, totalSalary, totalAccommodation, perStaff });
+    }
+
+    res.status(400).json({ message: "Provide date or month query param" });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

@@ -1,36 +1,38 @@
-// routes/roiRoutes.js
-import { Router } from "express";
-import { auth, requireRole } from "../middleware/auth.js";
+// src/routes/roi.js
+import express from "express";
+import { auth } from "../middleware/auth.js";
+
 import {
   createEntry,
   getEntries,
   getEntryById,
   updateEntry,
-  staffUpdateEntry,
   requestEdit,
-  getEditRequests,
   reviewEdit,
+  getEditRequests,
   getPendingRequestsCount,
+  staffUpdateEntry,
 } from "../controllers/roiController.js";
 
-const router = Router();
+import {
+  addSettlement,
+  deleteSettlement,
+} from "../controllers/roiSettleController.js";
 
-// Counts
-router.get("/edit-requests/pending/count", auth, getPendingRequestsCount);
+const router = express.Router();
+router.use(auth);
 
-// Edit requests (specific first!)
-router.get("/edit-requests", auth, getEditRequests);
-router.post("/edit-request", auth, requestEdit);
-router.patch("/edit-request/:id", auth, requireRole("OWNER"), reviewEdit);
+router.route("/").get(getEntries).post(createEntry);
 
-// ROI CRUD (generic last)
+router.get("/edit-requests",               getEditRequests);
+router.get("/pending-count",               getPendingRequestsCount);
+router.post("/edit-request",               requestEdit);
+router.patch("/edit-request/:id",          reviewEdit);
 
-router.post("/", auth, requireRole(["OWNER", "STAFF"]), createEntry);
-router.get("/", auth, getEntries);
-router.get("/:id", auth, getEntryById);
-router.put("/:id", auth, requireRole("OWNER"), updateEntry);
-
-// Staff-limited update
-router.patch("/:id/staff-update", auth, requireRole("STAFF"), staffUpdateEntry);
+router.get("/:id",                         getEntryById);
+router.put("/:id",                         updateEntry);
+router.post("/:id/staff-update",           staffUpdateEntry);
+router.post("/:id/settle",                 addSettlement);
+router.delete("/:id/settle/:settlementId", deleteSettlement);
 
 export default router;
