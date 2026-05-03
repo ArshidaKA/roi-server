@@ -8,12 +8,13 @@ import {
   updateStock,
   deleteStock,
 } from "../controllers/stockController.js";
+import { auth } from "../middleware/auth.js";
 
 
 const router = express.Router();
 
 // All routes require auth
-router.use(protect);
+router.use(auth);
 
 // Summary (for dashboard widget)
 router.get("/summary", getStockSummary);
