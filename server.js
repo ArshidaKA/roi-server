@@ -8,6 +8,7 @@
     import adminRoutes from "./src/routes/admin.js";
     import staffRoutes from "./src/routes/staff.js";
     import attendanceRoutes from "./src/routes/attendance.js";
+    import stockRoutes from "./src/routes/stock.js";
 
 
 
@@ -41,6 +42,7 @@
     app.use("/api/staff", staffRoutes);
     app.use("/api/admin", adminRoutes);
     app.use("/api/attendance", attendanceRoutes);
+    app.use("/api/stock", stockRoutes);
 
 
 
