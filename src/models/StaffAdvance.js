@@ -5,12 +5,17 @@ const advanceTxSchema = new mongoose.Schema({
   type:    { type: String, enum: ["credit", "settled"], required: true },
   amount:  { type: Number, required: true, min: 0 },
   note:    { type: String, default: "" },
+  // paidBy = which account was used to pay (for settled transactions)
+  paidBy:  { type: String, default: "" }, // "cash" | "federalBank" | "vibgyorBank" | "asifAccount" | "other" | ""
   date:    { type: Date,   default: Date.now },
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true, _id: true });
 
 const staffAdvanceSchema = new mongoose.Schema({
-  staffId:      { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+ // Change this:
+
+// To this:
+staffId: { type: mongoose.Schema.Types.ObjectId, ref: "Staff", required: true, unique: true },
   transactions: { type: [advanceTxSchema], default: [] },
 }, { timestamps: true });
 

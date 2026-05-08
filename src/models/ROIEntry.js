@@ -1,62 +1,54 @@
-// ─── src/models/StaffAdvance.js ──────────────────────────────────────────────
+// src/models/ROIEntry.js
+// Updated schema: every expense item now carries isCredit / creditSettled / creditOutstanding.
+// Top-level totalExpCreditOutstanding, totalExpCreditRaised, totalExpSettled for fast dashboard queries.
+
 import mongoose from "mongoose";
-
-const advanceTxSchema = new mongoose.Schema({
-  type:    { type: String, enum: ["credit", "settled"], required: true },
-  amount:  { type: Number, required: true, min: 0 },
-  note:    { type: String, default: "" },
-  date:    { type: Date,   default: Date.now },
-  addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-}, { timestamps: true, _id: true });
-
-const staffAdvanceSchema = new mongoose.Schema({
-  staffId:      { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true },
-  transactions: { type: [advanceTxSchema], default: [] },
-}, { timestamps: true });
-
-staffAdvanceSchema.virtual("totalCredit").get(function () {
-  return this.transactions.filter(t => t.type === "credit").reduce((s, t) => s + (t.amount || 0), 0);
-});
-staffAdvanceSchema.virtual("totalSettled").get(function () {
-  return this.transactions.filter(t => t.type === "settled").reduce((s, t) => s + (t.amount || 0), 0);
-});
-staffAdvanceSchema.virtual("outstanding").get(function () {
-  return this.totalCredit - this.totalSettled;
-});
-staffAdvanceSchema.set("toJSON",   { virtuals: true });
-staffAdvanceSchema.set("toObject", { virtuals: true });
-
-export const StaffAdvance = mongoose.model("StaffAdvance", staffAdvanceSchema);
-
-
-// ─── src/models/ROIEntry.js ──────────────────────────────────────────────────
-// Full updated ROI schema matching the new AddEntry structure (source per expense,
-// credit/settled/settlements on each day's entry).
-
 const { Schema, model } = mongoose;
 
-const subItemSchema        = new Schema({ item: String, amount: Number }, { _id: false });
-const otherExpenseSchema   = new Schema({ reason: String, amount: Number, source: String }, { _id: false });
-const marketingItemSchema  = new Schema({ remark: String, amount: Number, source: String }, { _id: false });
-const foodWastageItemSchema = new Schema({ item: String, amount: Number, source: String }, { _id: false });
+// ── Credit fields mixin (added to every expense sub-schema) ──
+const creditFields = {
+  isCredit:         { type: Boolean, default: false },
+  creditSettled:    { type: Number,  default: 0 },
+  creditOutstanding:{ type: Number,  default: 0 },
+};
 
-// Single numeric expense that also records which account it came from
-const singleExpSchema = new Schema({
-  amount: { type: Number, default: 0 },
-  source: { type: String, default: "" },
-}, { _id: false });
+// ── Sub-schemas ───────────────────────────────────────────────
+const subItemSchema = new Schema(
+  { item: String, amount: Number, source: { type: String, default: "" }, ...creditFields },
+  { _id: false }
+);
 
-const royaltyFeeSchema = new Schema({
-  label:  { type: String, default: "Royalty / Mgt. Fee" },
-  amount: { type: Number, default: 0 },
-  source: { type: String, default: "" },
-}, { _id: false });
+const otherExpenseSchema = new Schema(
+  { reason: String, amount: Number, source: String, ...creditFields },
+  { _id: false }
+);
 
+const marketingItemSchema = new Schema(
+  { remark: String, amount: Number, source: String, ...creditFields },
+  { _id: false }
+);
+
+const foodWastageItemSchema = new Schema(
+  { item: String, amount: Number, source: String, ...creditFields },
+  { _id: false }
+);
+
+const singleExpSchema = new Schema(
+  { amount: { type: Number, default: 0 }, source: { type: String, default: "" }, ...creditFields },
+  { _id: false }
+);
+
+const royaltyFeeSchema = new Schema(
+  { label: { type: String, default: "Royalty / Mgt. Fee" }, amount: { type: Number, default: 0 }, source: { type: String, default: "" }, ...creditFields },
+  { _id: false }
+);
+
+// ── Expense schema ─────────────────────────────────────────────
 const expenseSchema = new Schema({
   staffSalary:        [subItemSchema],
   staffAccommodation: [subItemSchema],
   commissionOnSales:  { type: singleExpSchema, default: () => ({}) },
-  royaltyFees:        { type: [royaltyFeeSchema],     default: [] },
+  royaltyFees:        { type: [royaltyFeeSchema],      default: [] },
   gasStaff:           { type: singleExpSchema, default: () => ({}) },
   gasStore:           { type: singleExpSchema, default: () => ({}) },
   foodRefreshment:    { type: singleExpSchema, default: () => ({}) },
@@ -72,7 +64,7 @@ const expenseSchema = new Schema({
   other:              { type: [otherExpenseSchema],    default: [] },
 }, { _id: false });
 
-// Revenue split — four accounts
+// ── Revenue split ──────────────────────────────────────────────
 const revenueSplitSchema = new Schema({
   cash:        { type: Number, default: 0 },
   federalBank: { type: Number, default: 0 },
@@ -80,25 +72,21 @@ const revenueSplitSchema = new Schema({
   asifAccount: { type: Number, default: 0 },
 }, { _id: false });
 
-// Individual settlement log entry
-const settlementSchema = new Schema({
-  amount:  { type: Number, required: true },
-  account: { type: String, default: "" },
-  date:    { type: Date,   default: Date.now },
-  note:    { type: String, default: "" },
-}, { _id: true, timestamps: true });
-
+// ── ROI Entry ──────────────────────────────────────────────────
 const roiEntrySchema = new Schema({
   date:         { type: Date,   required: true },
   totalRevenue: { type: Number, required: true },
   revenueSplit: { type: revenueSplitSchema, default: () => ({}) },
-  purchaseCost: { type: [subItemSchema], default: [] },
-  expenses:     { type: expenseSchema },
 
-  // ── Credit / Settlement ──────────────────────────────────────
-  creditAmount:  { type: Number, default: 0 },  // revenue not yet collected on this day
-  settledAmount: { type: Number, default: 0 },  // cumulative recovered amount
-  settlements:   { type: [settlementSchema], default: [] },
+  // purchaseCost rows also carry credit fields
+  purchaseCost: { type: [subItemSchema], default: [] },
+
+  expenses: { type: expenseSchema },
+
+  // ── Expense credit totals (pre-computed on save for fast dashboard queries) ──
+  totalExpCreditRaised:      { type: Number, default: 0 },
+  totalExpSettled:           { type: Number, default: 0 },
+  totalExpCreditOutstanding: { type: Number, default: 0 },
 
   createdBy: { type: Schema.Types.ObjectId, ref: "User" },
 }, { timestamps: true });

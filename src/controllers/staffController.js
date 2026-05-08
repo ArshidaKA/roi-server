@@ -15,7 +15,7 @@ export async function createStaff(req, res) {
     res.status(201).json(staff);
   } catch (err) {
     res.status(400).json({ message: err.message });
-  }
+  } 
 
 }
 
